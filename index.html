@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🪲 獨角仙飼養監控系統</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Noto Sans TC", sans-serif; background: #f1f5f9; color: #1e293b; }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #1e3a5f, #2563eb);
+      color: white; padding: 16px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    header h1 { font-size: 1.3rem; display: flex; align-items: center; gap: 8px; }
+    .header-right { display: flex; align-items: center; gap: 16px; font-size: 0.85rem; }
+    .refresh-btn {
+      background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4);
+      color: white; padding: 6px 14px; border-radius: 20px; cursor: pointer;
+      transition: background 0.2s;
+    }
+    .refresh-btn:hover { background: rgba(255,255,255,0.35); }
+
+    /* ── Nav ── */
+    nav {
+      background: white; padding: 0 24px;
+      display: flex; gap: 0; border-bottom: 2px solid #e2e8f0;
+    }
+    nav a {
+      display: block; padding: 12px 20px; text-decoration: none;
+      color: #64748b; font-size: 0.9rem; border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+    }
+    nav a.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
+    nav a:hover  { color: #2563eb; background: #f8faff; }
+
+    /* ── 統計列 ── */
+    .stats-bar {
+      display: flex; gap: 12px; padding: 16px 24px;
+      background: white; border-bottom: 1px solid #e2e8f0;
+      flex-wrap: wrap;
+    }
+    .stat-chip {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 20px; font-size: 0.82rem; font-weight: 500;
+    }
+    .chip-normal  { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .chip-warning { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+    .chip-danger  { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .chip-offline { background: #f9fafb; color: #6b7280; border: 1px solid #e5e7eb; }
+
+    /* ── 九宮格 ── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px; padding: 20px 24px;
+      max-width: 1200px; margin: 0 auto;
+    }
+    @media (max-width: 768px) {
+      .grid { grid-template-columns: repeat(2, 1fr); padding: 12px; gap: 12px; }
+    }
+    @media (max-width: 480px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── 卡片 ── */
+    .card {
+      background: white; border-radius: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      padding: 18px; cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      border-top: 4px solid #e2e8f0;
+      text-decoration: none; color: inherit; display: block;
+    }
+    .card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,0.12); }
+    .card.normal  { border-top-color: #22c55e; }
+    .card.warning { border-top-color: #f59e0b; }
+    .card.danger  { border-top-color: #ef4444; animation: pulse-border 1.5s infinite; }
+    .card.offline { border-top-color: #9ca3af; opacity: 0.75; }
+
+    @keyframes pulse-border {
+      0%, 100% { box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+      50%       { box-shadow: 0 2px 16px rgba(239,68,68,0.35); }
+    }
+
+    .card-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 14px;
+    }
+    .card-title { font-size: 1rem; font-weight: 700; color: #1e293b; }
+    .status-badge {
+      font-size: 0.75rem; padding: 3px 10px; border-radius: 12px; font-weight: 600;
+    }
+
+    /* ── 感測器數值 ── */
+    .sensor-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 8px; margin-bottom: 12px;
+    }
+    .sensor-item {
+      background: #f8fafc; border-radius: 10px;
+      padding: 10px; text-align: center;
+    }
+    .sensor-icon { font-size: 1.2rem; }
+    .sensor-value { font-size: 1.15rem; font-weight: 700; color: #1e293b; margin: 2px 0; }
+    .sensor-label { font-size: 0.7rem; color: #94a3b8; }
+    .sensor-item.warn  { background: #fffbeb; }
+    .sensor-item.danger { background: #fef2f2; }
+
+    .card-footer {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.75rem; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 10px;
+    }
+    .offline-tag { color: #ef4444; font-weight: 600; }
+
+    /* ── 載入/錯誤 ── */
+    .loading {
+      text-align: center; padding: 60px; color: #94a3b8; font-size: 1rem;
+    }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid #e2e8f0;
+      border-top-color: #2563eb; border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .update-time { font-size: 0.82rem; opacity: 0.85; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🪲 獨角仙飼養監控系統</h1>
+  <div class="header-right">
+    <span class="update-time" id="updateTime">讀取中...</span>
+    <button class="refresh-btn" onclick="loadData()">🔄 重新整理</button>
+  </div>
+</header>
+
+<nav>
+  <a href="index.html" class="active">🏠 總覽</a>
+  <a href="compare.html">📊 比較分析</a>
+</nav>
+
+<div class="stats-bar" id="statsBar">
+  <span class="stat-chip chip-normal">🟢 正常 —</span>
+  <span class="stat-chip chip-warning">🟡 注意 —</span>
+  <span class="stat-chip chip-danger">🔴 警示 —</span>
+  <span class="stat-chip chip-offline">⚫ 離線 —</span>
+</div>
+
+<div class="grid" id="grid">
+  <div class="loading"><div class="spinner"></div>資料載入中...</div>
+</div>
+
+<script src="js/config.js"></script>
+<script>
+  // ── 渲染卡片 ──
+  function renderCards(data) {
+    const grid = document.getElementById("grid");
+    let normal = 0, warning = 0, danger = 0, offline = 0;
+
+    // 建立 group_id → data 的 map
+    const map = {};
+    data.forEach(d => { map[d.group_id] = d; });
+
+    let html = "";
+    for (let i = 1; i <= 9; i++) {
+      const item = map[i];
+      if (!item) {
+        html += renderEmptyCard(i);
+        offline++;
+        continue;
+      }
+
+      const st = getStatus(item);
+      const stInfo = CONFIG.STATUS_MAP[st];
+      if (st === "normal")  normal++;
+      else if (st === "warning") warning++;
+      else if (st === "danger")  danger++;
+      else offline++;
+
+      const tSt   = getValueStatus("temp",      item.temp);
+      const hSt   = getValueStatus("humi",      item.humi);
+      const sSt   = getValueStatus("soil",      item.soil);
+      const stSt  = getValueStatus("soil_temp", item.soil_temp);
+
+      html += `
+        <a class="card ${st}" href="detail.html?group=${i}">
+          <div class="card-header">
+            <span class="card-title">${CONFIG.GROUP_NAMES[i]}</span>
+            <span class="status-badge"
+              style="background:${stInfo.bg};color:${stInfo.color}">
+              ${stInfo.icon} ${stInfo.label}
+            </span>
+          </div>
+          <div class="sensor-grid">
+            <div class="sensor-item ${tSt !== 'normal' ? tSt : ''}">
+              <div class="sensor-icon">🌡️</div>
+              <div class="sensor-value">${item.temp ?? "—"}°C</div>
+              <div class="sensor-label">空氣溫度</div>
+            </div>
+            <div class="sensor-item ${hSt !== 'normal' ? hSt : ''}">
+              <div class="sensor-icon">💧</div>
+              <div class="sensor-value">${item.humi ?? "—"}%</div>
+              <div class="sensor-label">空氣濕度</div>
+            </div>
+            <div class="sensor-item ${sSt !== 'normal' ? sSt : ''}">
+              <div class="sensor-icon">🌱</div>
+              <div class="sensor-value">${item.soil ?? "—"}</div>
+              <div class="sensor-label">土壤濕度</div>
+            </div>
+            <div class="sensor-item ${stSt !== 'normal' ? stSt : ''}">
+              <div class="sensor-icon">🌡️</div>
+              <div class="sensor-value">${item.soil_temp ?? "—"}°C</div>
+              <div class="sensor-label">土壤溫度</div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span>🕐 ${formatTime(item.timestamp)}</span>
+            ${!item.is_online ? '<span class="offline-tag">⚠️ 離線</span>' : '<span>點擊查看詳情 →</span>'}
+          </div>
+        </a>`;
+    }
+
+    grid.innerHTML = html;
+
+    // 更新統計列
+    document.getElementById("statsBar").innerHTML = `
+      <span class="stat-chip chip-normal">🟢 正常 ${normal} 組</span>
+      <span class="stat-chip chip-warning">🟡 注意 ${warning} 組</span>
+      <span class="stat-chip chip-danger">🔴 警示 ${danger} 組</span>
+      <span class="stat-chip chip-offline">⚫ 離線 ${offline} 組</span>
+    `;
+  }
+
+  function renderEmptyCard(i) {
+    return `
+      <div class="card offline">
+        <div class="card-header">
+          <span class="card-title">${CONFIG.GROUP_NAMES[i]}</span>
+          <span class="status-badge" style="background:#f9fafb;color:#6b7280">⚫ 無資料</span>
+        </div>
+        <div style="text-align:center;padding:24px;color:#94a3b8;font-size:0.85rem">
+          尚未收到資料
+        </div>
+      </div>`;
+  }
+
+  // ── 載入資料 ──
+  async function loadData() {
+    document.getElementById("updateTime").textContent = "更新中...";
+    try {
+      const res = await fetch(
+        CONFIG.GAS_URL + "?action=read_overview"
+      );
+      const json = await res.json();
+      if (json.status === "OK") {
+        renderCards(json.data);
+        const now = new Date();
+        document.getElementById("updateTime").textContent =
+          `最後更新：${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}:${String(now.getSeconds()).padStart(2,"0")}`;
+      } else {
+        showError(json.message);
+      }
+    } catch (e) {
+      showError(e.message);
+    }
+  }
+
+  function showError(msg) {
+    document.getElementById("grid").innerHTML =
+      `<div class="loading" style="color:#ef4444">⚠️ 載入失敗：${msg}<br><br>
+       <button class="refresh-btn" style="background:#ef4444;border:none;color:white;padding:8px 20px;border-radius:20px;cursor:pointer"
+         onclick="loadData()">重試</button></div>`;
+    document.getElementById("updateTime").textContent = "載入失敗";
+  }
+
+  // 初始載入 + 定時刷新
+  loadData();
+  setInterval(loadData, CONFIG.REFRESH_INTERVAL);
+</script>
+</body>
+</html>

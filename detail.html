@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>詳細監控 - 獨角仙飼養監控系統</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Noto Sans TC", sans-serif; background: #f1f5f9; color: #1e293b; }
+
+    header {
+      background: linear-gradient(135deg, #1e3a5f, #2563eb);
+      color: white; padding: 14px 24px;
+      display: flex; align-items: center; gap: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .back-btn {
+      background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4);
+      color: white; padding: 6px 14px; border-radius: 20px;
+      cursor: pointer; text-decoration: none; font-size: 0.85rem;
+      transition: background 0.2s;
+    }
+    .back-btn:hover { background: rgba(255,255,255,0.35); }
+    header h1 { font-size: 1.2rem; flex: 1; }
+    .refresh-btn {
+      background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4);
+      color: white; padding: 6px 14px; border-radius: 20px; cursor: pointer; font-size: 0.85rem;
+    }
+
+    .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+
+    /* ── 即時數值卡片 ── */
+    .realtime-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 12px; margin-bottom: 20px;
+    }
+    @media (max-width: 600px) { .realtime-grid { grid-template-columns: repeat(2, 1fr); } }
+
+    .rt-card {
+      background: white; border-radius: 14px;
+      padding: 16px; text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      border-bottom: 3px solid #e2e8f0;
+    }
+    .rt-card.normal  { border-bottom-color: #22c55e; }
+    .rt-card.warning { border-bottom-color: #f59e0b; background: #fffbeb; }
+    .rt-card.danger  { border-bottom-color: #ef4444; background: #fef2f2; }
+    .rt-icon  { font-size: 1.6rem; margin-bottom: 6px; }
+    .rt-value { font-size: 1.6rem; font-weight: 800; color: #1e293b; }
+    .rt-unit  { font-size: 0.75rem; color: #94a3b8; margin-left: 2px; }
+    .rt-label { font-size: 0.75rem; color: #64748b; margin-top: 4px; }
+    .rt-range { font-size: 0.68rem; color: #94a3b8; margin-top: 2px; }
+
+    /* ── 狀態列 ── */
+    .status-bar {
+      background: white; border-radius: 12px; padding: 14px 18px;
+      margin-bottom: 20px; display: flex; align-items: center; gap: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    }
+    .status-dot { width: 12px; height: 12px; border-radius: 50%; }
+
+    /* ── 時間範圍選擇 ── */
+    .range-bar {
+      display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;
+    }
+    .range-btn {
+      padding: 7px 18px; border-radius: 20px; border: 1px solid #e2e8f0;
+      background: white; cursor: pointer; font-size: 0.85rem; color: #64748b;
+      transition: all 0.2s;
+    }
+    .range-btn.active, .range-btn:hover {
+      background: #2563eb; color: white; border-color: #2563eb;
+    }
+
+    /* ── 圖表區 ── */
+    .chart-section {
+      background: white; border-radius: 14px; padding: 20px;
+      margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    }
+    .chart-title {
+      font-size: 0.95rem; font-weight: 700; color: #374151;
+      margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+    }
+    .chart-wrap { position: relative; height: 180px; }
+
+    /* ── 統計摘要 ── */
+    .summary-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 10px; margin-top: 12px;
+    }
+    @media (max-width: 600px) { .summary-grid { grid-template-columns: repeat(2, 1fr); } }
+    .summary-item {
+      background: #f8fafc; border-radius: 10px; padding: 10px; text-align: center;
+    }
+    .summary-label { font-size: 0.7rem; color: #94a3b8; }
+    .summary-value { font-size: 1rem; font-weight: 700; color: #1e293b; margin-top: 2px; }
+
+    .loading { text-align: center; padding: 60px; color: #94a3b8; }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid #e2e8f0;
+      border-top-color: #2563eb; border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<header>
+  <a class="back-btn" href="index.html">← 返回總覽</a>
+  <h1 id="pageTitle">詳細監控</h1>
+  <button class="refresh-btn" onclick="loadAll()">🔄 重新整理</button>
+</header>
+
+<div class="container">
+  <div id="realtimeSection">
+    <div class="loading"><div class="spinner"></div>載入中...</div>
+  </div>
+  <div id="chartSection"></div>
+</div>
+
+<script src="js/config.js"></script>
+<script>
+  const params   = new URLSearchParams(location.search);
+  const groupId  = parseInt(params.get("group")) || 1;
+  let   curRange = "today";
+  let   charts   = {};
+
+  document.getElementById("pageTitle").textContent =
+    `${CONFIG.GROUP_NAMES[groupId]} 詳細監控`;
+
+  // ── 渲染即時數值 ──
+  function renderRealtime(item) {
+    const st = getStatus(item);
+    const stInfo = CONFIG.STATUS_MAP[st];
+
+    const fields = [
+      { key: "temp",      icon: "🌡️", label: "空氣溫度", unit: "°C", type: "temp" },
+      { key: "humi",      icon: "💧", label: "空氣濕度", unit: "%",  type: "humi" },
+      { key: "soil",      icon: "🌱", label: "土壤濕度", unit: "",   type: "soil" },
+      { key: "soil_temp", icon: "🌡️", label: "土壤溫度", unit: "°C", type: "soil_temp" }
+    ];
+
+    const cardsHtml = fields.map(f => {
+      const val = item[f.key] ?? "—";
+      const vst = getValueStatus(f.type, val);
+      const t   = CONFIG.THRESHOLD[f.type];
+      return `
+        <div class="rt-card ${vst}">
+          <div class="rt-icon">${f.icon}</div>
+          <div class="rt-value">${val}<span class="rt-unit">${f.unit}</span></div>
+          <div class="rt-label">${f.label}</div>
+          <div class="rt-range">正常 ${t.warn_low}～${t.warn_high}</div>
+        </div>`;
+    }).join("");
+
+    document.getElementById("realtimeSection").innerHTML = `
+      <div class="status-bar" style="border-left:4px solid ${stInfo.color}">
+        <div class="status-dot" style="background:${stInfo.color}"></div>
+        <strong>${stInfo.icon} ${stInfo.label}</strong>
+        <span style="color:#94a3b8;font-size:0.85rem">
+          最後更新：${formatTime(item.timestamp)}
+          ${!item.is_online ? ' ⚠️ 已離線' : ''}
+        </span>
+      </div>
+      <div class="realtime-grid">${cardsHtml}</div>
+      <div class="range-bar">
+        <span style="font-size:0.85rem;color:#64748b;align-self:center">時間範圍：</span>
+        ${["today","yesterday","7days","30days","90days"].map(r => {
+          const labels = {today:"今天",yesterday:"昨天","7days":"近7天","30days":"近30天","90days":"近90天"};
+          return `<button class="range-btn ${r===curRange?'active':''}"
+            onclick="changeRange('${r}')">${labels[r]}</button>`;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  // ── 渲染圖表 ──
+  function renderCharts(data) {
+    const labels = data.map(d => new Date(d.timestamp));
+    const section = document.getElementById("chartSection");
+
+    const series = [
+      { key: "temp",      icon: "🌡️", label: "空氣溫度 (°C)", color: "#ef4444",
+        warnL: CONFIG.THRESHOLD.temp.warn_low, warnH: CONFIG.THRESHOLD.temp.warn_high },
+      { key: "humi",      icon: "💧", label: "空氣濕度 (%)",  color: "#3b82f6",
+        warnL: CONFIG.THRESHOLD.humi.warn_low, warnH: CONFIG.THRESHOLD.humi.warn_high },
+      { key: "soil",      icon: "🌱", label: "土壤濕度",      color: "#22c55e",
+        warnL: CONFIG.THRESHOLD.soil.warn_low, warnH: CONFIG.THRESHOLD.soil.warn_high },
+      { key: "soil_temp", icon: "🌡️", label: "土壤溫度 (°C)", color: "#f59e0b",
+        warnL: CONFIG.THRESHOLD.soil_temp.warn_low, warnH: CONFIG.THRESHOLD.soil_temp.warn_high }
+    ];
+
+    // 銷毀舊圖表
+    Object.values(charts).forEach(c => c.destroy());
+    charts = {};
+
+    let html = "";
+    series.forEach(s => {
+      const vals = data.map(d => d[s.key]);
+      const avg  = vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1) : "—";
+      const max  = vals.length ? Math.max(...vals).toFixed(1) : "—";
+      const min  = vals.length ? Math.min(...vals).toFixed(1) : "—";
+      const last = vals.length ? vals[vals.length-1] : "—";
+
+      html += `
+        <div class="chart-section">
+          <div class="chart-title">${s.icon} ${s.label}</div>
+          <div class="chart-wrap"><canvas id="chart_${s.key}"></canvas></div>
+          <div class="summary-grid">
+            <div class="summary-item"><div class="summary-label">最新</div><div class="summary-value">${last}</div></div>
+            <div class="summary-item"><div class="summary-label">平均</div><div class="summary-value">${avg}</div></div>
+            <div class="summary-item"><div class="summary-label">最高</div><div class="summary-value">${max}</div></div>
+            <div class="summary-item"><div class="summary-label">最低</div><div class="summary-value">${min}</div></div>
+          </div>
+        </div>`;
+    });
+
+    section.innerHTML = html || `<div class="loading">此時間範圍內無資料</div>`;
+
+    // 繪製圖表
+    series.forEach(s => {
+      const canvas = document.getElementById("chart_" + s.key);
+      if (!canvas) return;
+      const vals = data.map(d => d[s.key]);
+      charts[s.key] = new Chart(canvas, {
+        type: "line",
+        data: {
+          labels: labels,
+          datasets: [{
+            label: s.label,
+            data: vals,
+            borderColor: s.color,
+            backgroundColor: s.color + "18",
+            borderWidth: 2,
+            pointRadius: data.length > 50 ? 0 : 3,
+            tension: 0.3,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { mode: "index", intersect: false }
+          },
+          scales: {
+            x: {
+              type: "time",
+              time: { tooltipFormat: "MM/dd HH:mm", displayFormats: { hour: "HH:mm", day: "MM/dd" } },
+              ticks: { maxTicksLimit: 8, font: { size: 11 } },
+              grid: { display: false }
+            },
+            y: {
+              ticks: { font: { size: 11 } },
+              grid: { color: "#f1f5f9" }
+            }
+          },
+          annotation: {
+            annotations: {
+              warnHigh: { type:"line", yMin: s.warnH, yMax: s.warnH,
+                borderColor:"#f59e0b", borderWidth:1, borderDash:[4,4] },
+              warnLow:  { type:"line", yMin: s.warnL, yMax: s.warnL,
+                borderColor:"#f59e0b", borderWidth:1, borderDash:[4,4] }
+            }
+          }
+        }
+      });
+    });
+  }
+
+  // ── 切換時間範圍 ──
+  function changeRange(range) {
+    curRange = range;
+    loadHistory();
+  }
+
+  // ── 載入總覽（取即時數值） ──
+  async function loadOverview() {
+    try {
+      const res  = await fetch(CONFIG.GAS_URL + "?action=read_overview");
+      const json = await res.json();
+      if (json.status === "OK") {
+        const item = json.data.find(d => d.group_id == groupId);
+        if (item) renderRealtime(item);
+      }
+    } catch(e) { console.error(e); }
+  }
+
+  // ── 載入歷史資料 ──
+  async function loadHistory() {
+    document.getElementById("chartSection").innerHTML =
+      `<div class="loading"><div class="spinner"></div>圖表載入中...</div>`;
+    try {
+      const res  = await fetch(
+        CONFIG.GAS_URL + `?action=read_group&group_id=${groupId}&range=${curRange}`
+      );
+      const json = await res.json();
+      if (json.status === "OK") renderCharts(json.data);
+    } catch(e) {
+      document.getElementById("chartSection").innerHTML =
+        `<div class="loading" style="color:#ef4444">⚠️ 圖表載入失敗：${e.message}</div>`;
+    }
+  }
+
+  async function loadAll() {
+    await loadOverview();
+    await loadHistory();
+  }
+
+  loadAll();
+  setInterval(loadAll, CONFIG.REFRESH_INTERVAL);
+</script>
+</body>
+</html>
