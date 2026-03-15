@@ -19,7 +19,7 @@ const CONFIG = {
   THRESHOLD: {
     temp:      { warn_low: 22, warn_high: 28, danger_low: 18, danger_high: 32 },
     humi:      { warn_low: 60, warn_high: 80, danger_low: 50, danger_high: 90 },
-    soil:      { warn_low: 400, warn_high: 700, danger_low: 300, danger_high: 800 },
+    soil:      { warn_low: 40, warn_high: 75, danger_low: 30, danger_high: 85 },
     soil_temp: { warn_low: 20, warn_high: 28, danger_low: 18, danger_high: 30 }
   },
 
