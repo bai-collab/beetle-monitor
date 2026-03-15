@@ -290,6 +290,8 @@
   // ── 切換時間範圍 ──
   function changeRange(range) {
     curRange = range;
+    document.querySelectorAll(".range-btn").forEach(b => b.classList.remove("active"));
+    document.querySelector(`.range-btn[onclick="changeRange('${range}')"]`).classList.add("active");
     loadHistory();
   }
 
